@@ -175,8 +175,7 @@ def compare_history():
 
 
 if __name__ == "__main__":
-    print("\n  🎓 夏令营模拟面试 — Web 版")
-    print("  " + "=" * 40)
+    print("\n  === 夏令营模拟面试 - Web 版 ===")
     print("  打开浏览器访问: http://127.0.0.1:5000")
     print("  按 Ctrl+C 停止服务器\n")
     app.run(host="127.0.0.1", port=5000, debug=True)
