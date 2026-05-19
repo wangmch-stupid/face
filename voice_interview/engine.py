@@ -177,6 +177,11 @@ class RuleBasedEngine:
         # 过渡语（每个维度第一次进入时）
         if qi == 0:
             transition = self.config["transitions"].get(dim, "")
+            # 项目维度：如果有简历，引用简历中的关键词
+            if dim == "project":
+                hints = self._extract_resume_hints()
+                if hints:
+                    transition += f"\n\n(我注意到你的简历中提到了 {hints}，请围绕这些来谈。)"
             state.transcript.append({
                 "dimension": dim,
                 "role": "interviewer",
@@ -236,6 +241,21 @@ class RuleBasedEngine:
                 return None
         else:
             return None
+
+    def _extract_resume_hints(self) -> str:
+        """从简历中提取项目相关的关键词"""
+        resume = self.state.resume
+        if not resume or resume.startswith("(跳过") or resume.startswith("(未提交"):
+            return ""
+        # 取前 300 字，找可能的项目名或技术关键词
+        snippet = resume[:300]
+        # 提取英文技术词（大写/驼峰/缩写）
+        import re
+        tech_words = re.findall(r'\b[A-Z][a-zA-Z0-9\+#\-]{2,}\b', snippet)
+        # 提取中文项目相关词
+        cn_projects = re.findall(r'[「《]([^》」]{2,20})[》」]', snippet)
+        keywords = list(set(tech_words[:3] + cn_projects[:2]))
+        return "、".join(keywords) if keywords else ""
 
     def _project_question(self, qi: int) -> str:
         """项目经历追问"""

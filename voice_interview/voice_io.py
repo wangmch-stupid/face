@@ -294,18 +294,29 @@ def listen(language: str = "zh-CN", timeout: int = 10) -> str:
 
     # 等待用户按 Enter 或超时
     start_time = time.time()
-    user_stopped = [False]
 
     def _wait_enter():
         input("")
-        user_stopped[0] = True
+        recording_flag[0] = False
 
     wait_thread = threading.Thread(target=_wait_enter, daemon=True)
     wait_thread.start()
-    wait_thread.join(timeout=max_duration)
+
+    # 实时倒计时显示
+    last_countdown = -1
+    while wait_thread.is_alive() and recording_flag[0]:
+        elapsed = time.time() - start_time
+        remaining = int(max_duration - elapsed)
+        if remaining < 0:
+            break
+        if remaining != last_countdown:
+            print(f"\r  🔴 录音中... 剩余 {remaining} 秒 (按 Enter 结束)", end=" ", flush=True)
+            last_countdown = remaining
+        time.sleep(0.5)
 
     recording_flag[0] = False
     rec_thread.join(timeout=2)
+    print("\r" + " " * 60 + "\r", end="")  # 清除倒计时行
 
     if not audio_chunks:
         print("\n  ⏰ 未检测到录音。")
@@ -347,12 +358,18 @@ def _transcribe(audio_data, sample_rate: int, language: str) -> str:
             )
             text = " ".join(s.text for s in segments).strip()
             if text:
-                print("✓ [离线]")
+                print("✓ [Whisper离线]")
                 return text
-        except Exception:
-            pass
+            else:
+                print("⚠️ [Whisper] 未识别到语音内容", end=", ")
+        except Exception as e:
+            print(f"⚠️ [Whisper] 转写异常: {e}", end=", ")
+    else:
+        print("⚠️ [Whisper] 模型未就绪", end=", ")
 
     # --- Google 在线（重试3次）---
+    print("尝试 Google 在线...", end=" ")
+    last_error = None
     for attempt in range(3):
         try:
             import speech_recognition as sr
@@ -361,16 +378,20 @@ def _transcribe(audio_data, sample_rate: int, language: str) -> str:
             sr_audio = sr.AudioData(int_audio.tobytes(), sample_rate, 2)
             text = r.recognize_google(sr_audio, language=language)
             if text.strip():
-                tag = "✓" if attempt == 0 else f"✓(重试{attempt+1})"
+                tag = "✓ [Google在线]" if attempt == 0 else f"✓ [Google在线 重试{attempt+1}]"
                 print(tag)
                 return text.strip()
         except sr.UnknownValueError:
-            continue  # 听不清，重试
-        except sr.RequestError:
-            continue  # 网络波动，重试
-        except Exception:
+            last_error = "无法理解语音内容"
+            continue
+        except sr.RequestError as e:
+            last_error = f"网络请求失败: {e}"
+            continue
+        except Exception as e:
+            last_error = str(e)
             continue
 
+    print(f"失败 ({last_error})" if last_error else "失败")
     return ""
 
 

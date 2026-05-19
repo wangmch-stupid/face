@@ -337,8 +337,12 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
         if current_dim_idx < len(engine.state.DIMENSIONS):
             current_dim = engine.state.DIMENSIONS[current_dim_idx]
             if current_dim != last_dim:
+                total = len(engine.state.DIMENSIONS)
+                dim_num = current_dim_idx + 1
+                progress_bar = "█" * dim_num + "░" * (total - dim_num)
                 label = engine.state.DIMENSION_LABELS.get(current_dim, current_dim)
                 print_divider()
+                print(f"  [{dim_num}/{total}] {progress_bar}")
                 print(f"  ▶ {label}")
                 print_divider()
                 last_dim = current_dim
@@ -361,11 +365,23 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
         # 获取回答
         try:
             if voice_io_enabled:
-                answer = listen(language="zh-CN", timeout=60)
-                if not answer:
-                    answer = input("\n  ⌨️  语音未识别到，请打字回答: ")
-                else:
-                    print(f"\n  📝 识别结果: {answer}")
+                attempt_count = 0
+                retry = True
+                while retry and attempt_count < 2:
+                    attempt_count += 1
+                    answer = listen(language="zh-CN", timeout=60)
+                    if answer:
+                        print(f"\n  📝 识别结果: {answer}")
+                        retry = False
+                    elif attempt_count < 2:
+                        print(f"\n  🎤 未识别到语音，再试一次？(第{attempt_count}/2次)")
+                        choice = input("  按 Enter 重试语音，输入任意文字后回车 = 打字模式: ").strip()
+                        if choice:
+                            answer = choice
+                            retry = False
+                    else:
+                        answer = input("\n  ⌨️  语音识别 2 次均失败，请打字回答: ")
+                        retry = False
             else:
                 answer = input("\n你的回答: ")
         except (EOFError, KeyboardInterrupt):
@@ -374,6 +390,10 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
 
         if not answer or not answer.strip():
             answer = "(候选人未作答)"
+        elif answer.strip().lower() in ("/quit", "/exit"):
+            print("\n  👋 你选择结束面试。正在保存记录...")
+            engine.state.finished = True
+            break
 
         # 记录回答
         try:
