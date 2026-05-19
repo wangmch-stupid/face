@@ -31,6 +31,10 @@
 
   <!-- 输入区 -->
   <div class="input-area">
+    <div class="timer-display" id="timerDisplay">
+      <span class="timer-icon">⏱</span>
+      <span class="timer-count" id="timerCount">--</span>
+    </div>
     <button class="btn-mic" id="micBtn" onclick="toggleVoice()" title="语音回答">🎤</button>
     <input type="text" id="textInput" class="text-input chat-input"
       placeholder="输入你的回答... (支持 /skip 跳过 /quit 结束)">
@@ -84,7 +88,10 @@ async function startInterview() {
       setTimeout(() => {
         addMessage('interviewer', data.question);
         speakText(data.question);
-        updateProgress(data.dim_index, 8);
+        updateProgress(data.dim_index, data.total_dims || 8);
+        if (data.time_limit) {
+          startQuestionTimer(data.time_limit);
+        }
       }, 2000);
     }
   } catch (e) {
@@ -332,9 +339,46 @@ function closePaper() {
   document.getElementById('textInput').focus();
 }
 
-// 修改 submitAnswer 检测英文维度
-const originalSubmitAnswer = submitAnswer;
-// 在接收到新问题后检测英文维度
+// ========== 题目计时器 ==========
+let questionTimerInterval = null;
+let questionSeconds = 0;
+
+function startQuestionTimer(seconds) {
+  clearQuestionTimer();
+  questionSeconds = seconds;
+  updateQuestionTimerDisplay();
+  questionTimerInterval = setInterval(() => {
+    questionSeconds--;
+    updateQuestionTimerDisplay();
+    if (questionSeconds <= 0) {
+      clearQuestionTimer();
+      document.getElementById('timerCount').textContent = '超时';
+      document.getElementById('timerDisplay').classList.add('timeout');
+    }
+  }, 1000);
+}
+
+function clearQuestionTimer() {
+  if (questionTimerInterval) {
+    clearInterval(questionTimerInterval);
+    questionTimerInterval = null;
+  }
+  document.getElementById('timerDisplay').classList.remove('timeout');
+}
+
+function updateQuestionTimerDisplay() {
+  const m = Math.floor(Math.max(0, questionSeconds) / 60);
+  const s = Math.max(0, questionSeconds) % 60;
+  document.getElementById('timerCount').textContent =
+    String(m) + ':' + String(s).padStart(2, '0');
+  if (questionSeconds <= 30) {
+    document.getElementById('timerDisplay').classList.add('warning');
+  } else {
+    document.getElementById('timerDisplay').classList.remove('warning');
+  }
+}
+
+// 修改 submitAnswer 检测英文维度 + 启动计时器
 async function submitAnswer() {
   if (interviewFinished) return;
   const input = document.getElementById('textInput');
@@ -368,6 +412,10 @@ async function submitAnswer() {
           addMessage('interviewer', data.question);
           speakText(data.question);
           updateProgress(data.dim_index, data.total_dims);
+          // 启动计时器
+          if (data.time_limit) {
+            startQuestionTimer(data.time_limit);
+          }
           // 检测英文文献维度 → 弹出论文图片
           if (data.current_dim === 'english') {
             showPaper(data.current_dim);

@@ -149,6 +149,8 @@ def start_interview():
     opening = engine.start()
     question, dim_key, dim_label, dim_idx, total = _next_with_dim(engine)
 
+    time_limit = engine.get_time_limit()
+
     return jsonify({
         "opening": opening,
         "current_dim": dim_key,
@@ -156,6 +158,7 @@ def start_interview():
         "dim_index": dim_idx,
         "total_dims": total,
         "question": question,
+        "time_limit": time_limit,
         "finished": False
     })
 
@@ -205,6 +208,8 @@ def submit_answer():
     # 获取上一维度的反馈
     feedback = engine.get_dimension_feedback(dim_key) if dim_key else ""
 
+    time_limit = engine.get_time_limit()
+
     return jsonify({
         "finished": False,
         "current_dim": dim_key,
@@ -212,6 +217,7 @@ def submit_answer():
         "dim_index": dim_idx,
         "total_dims": total,
         "question": question,
+        "time_limit": time_limit,
         "feedback": feedback or ""
     })
 

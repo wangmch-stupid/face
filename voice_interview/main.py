@@ -429,8 +429,10 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
                 print_divider()
                 last_dim = current_dim
 
-        # 输出问题
-        print(f"\n【面试官】\n{question}\n")
+        # 输出问题（含时限）
+        time_limit = engine.get_time_limit()
+        limit_str = f"{time_limit // 60}分{time_limit % 60}秒" if time_limit >= 60 else f"{time_limit}秒"
+        print(f"\n【面试官】[时限: {limit_str}]\n{question}\n")
 
         # TTS 朗读
         if tts_enabled:

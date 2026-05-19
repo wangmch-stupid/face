@@ -326,6 +326,39 @@ body {
   border-top: 1px solid #30363d;
 }
 
+.timer-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 22px;
+  padding: 6px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #58a6ff;
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.timer-display.warning {
+  border-color: #d2991d;
+  color: #d2991d;
+  animation: blink 0.8s infinite;
+}
+
+.timer-display.timeout {
+  border-color: #f85149;
+  color: #f85149;
+}
+
+.timer-icon { font-size: 16px; }
+
+@keyframes blink {
+  50% { opacity: 0.4; }
+}
+
 .btn-mic {
   width: 44px;
   height: 44px;

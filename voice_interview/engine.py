@@ -65,6 +65,18 @@ class RuleBasedEngine:
     但可以通过回调接入 Claude API 获得智能追问
     """
 
+    # 每个维度的时限（秒）
+    DIM_TIME_LIMITS = {
+        "self_intro_cn": 90,
+        "self_intro_en": 90,
+        "project": 120,
+        "principle": 90,
+        "basics": 60,
+        "core_knowledge": 180,
+        "english": 300,
+        "quality": 90,
+    }
+
     def __init__(self, style: str, resume: str, materials: list, major: str):
         self.style = style
         self.config = STYLE_CONFIG[style]
@@ -149,6 +161,12 @@ class RuleBasedEngine:
 
     def is_finished(self) -> bool:
         return self.state.finished
+
+    def get_time_limit(self) -> int:
+        """返回当前问题的时限（秒）"""
+        if self._current_dim and self._current_dim in self.DIM_TIME_LIMITS:
+            return self.DIM_TIME_LIMITS[self._current_dim]
+        return 120  # 默认2分钟
 
     def get_dimension_feedback(self, dim: str) -> str:
         """结构化模式：每个维度结束时的即时反馈（返回分数+简短评语）"""
