@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>面试中 — 夏令营模拟面试</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="interview-container">
+  <!-- 顶部栏 -->
+  <div class="top-bar">
+    <span class="top-title">夏令营模拟面试</span>
+    <span class="top-style" id="styleBadge"></span>
+    <button class="btn-quit" onclick="quitInterview()">结束面试</button>
+  </div>
+
+  <!-- 进度条 -->
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <span class="progress-text" id="progressText">准备中...</span>
+  </div>
+
+  <!-- 对话区 -->
+  <div class="chat-area" id="chatArea">
+    <div class="chat-loading">正在连接面试官...</div>
+  </div>
+
+  <!-- 反馈弹窗 -->
+  <div class="feedback-toast" id="feedbackToast"></div>
+
+  <!-- 输入区 -->
+  <div class="input-area">
+    <button class="btn-mic" id="micBtn" onclick="toggleVoice()" title="语音回答">🎤</button>
+    <input type="text" id="textInput" class="text-input chat-input"
+      placeholder="输入你的回答... (支持 /skip 跳过 /quit 结束)">
+    <button class="btn-send" id="sendBtn" onclick="submitAnswer()">发送</button>
+  </div>
+
+  <div class="voice-status" id="voiceStatus"></div>
+</div>
+
+<script>
+// ========== 状态 ==========
+let interviewFinished = false;
+let isRecording = false;
+let recognition = null;
+let synth = window.speechSynthesis;
+let config = JSON.parse(localStorage.getItem('interview_config') || '{}');
+
+const styleNames = {stress: '压力面', structured: '结构化评分', gentle: '温和引导式'};
+document.getElementById('styleBadge').textContent = styleNames[config.style] || '';
+
+// ========== 启动面试 ==========
+async function startInterview() {
+  try {
+    const resp = await fetch('/api/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(config)
+    });
+    const data = await resp.json();
+    if (data.error) { alert(data.error); return; }
+    addMessage('interviewer', data.opening);
+    speakText(data.opening);
+    if (data.question) {
+      setTimeout(() => {
+        addMessage('interviewer', data.question);
+        speakText(data.question);
+        updateProgress(data.dim_index, 8);
+      }, 2000);
+    }
+  } catch (e) {
+    document.getElementById('chatArea').innerHTML =
+      '<div class="chat-error">连接失败，请确保服务器已启动</div>';
+  }
+}
+
+// ========== 提交回答 ==========
+async function submitAnswer() {
+  if (interviewFinished) return;
+  const input = document.getElementById('textInput');
+  const answer = input.value.trim();
+  if (!answer) return;
+
+  addMessage('candidate', answer);
+  input.value = '';
+
+  try {
+    const resp = await fetch('/api/answer', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({answer})
+    });
+    const data = await resp.json();
+
+    if (data.finished) {
+      interviewFinished = true;
+      addMessage('interviewer', data.report);
+      speakText('面试结束。请查看你的评估报告。');
+      document.getElementById('progressBar').style.width = '100%';
+      document.getElementById('progressText').textContent = '完成';
+      loadComparison();
+    } else {
+      // 反馈
+      if (data.feedback) {
+        showFeedback(data.feedback);
+      }
+      // 下一个问题
+      if (data.question) {
+        setTimeout(() => {
+          addMessage('interviewer', data.question);
+          speakText(data.question);
+          updateProgress(data.dim_index, data.total_dims);
+        }, 500);
+      }
+      updateProgress(data.dim_index, data.total_dims);
+    }
+  } catch (e) {
+    addMessage('system', '网络错误，请重试');
+  }
+}
+
+// ========== 语音输入 ==========
+function toggleVoice() {
+  if (isRecording) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+function startVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert('你的浏览器不支持语音识别，请使用 Chrome 或 Edge');
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = 'zh-CN';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    isRecording = true;
+    document.getElementById('micBtn').classList.add('recording');
+    document.getElementById('voiceStatus').textContent = '🔴 正在聆听...';
+  };
+
+  recognition.onresult = (event) => {
+    const text = event.results[0][0].transcript;
+    document.getElementById('textInput').value = text;
+    document.getElementById('voiceStatus').textContent = '📝 ' + text;
+  };
+
+  recognition.onerror = (event) => {
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+    document.getElementById('voiceStatus').textContent = '⚠️ 识别失败: ' + event.error;
+  };
+
+  recognition.onend = () => {
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+    if (document.getElementById('voiceStatus').textContent.startsWith('🔴')) {
+      document.getElementById('voiceStatus').textContent = '';
+    }
+  };
+
+  recognition.start();
+}
+
+function stopVoice() {
+  if (recognition) {
+    recognition.stop();
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+  }
+}
+
+// ========== TTS 语音输出 ==========
+function speakText(text) {
+  if (!synth) return;
+  synth.cancel(); // 停止之前未完成的朗读
+
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = detectEnglish(text) ? 'en-US' : 'zh-CN';
+  utter.rate = config.style === 'stress' ? 1.3 : config.style === 'gentle' ? 0.9 : 1.0;
+  utter.pitch = config.style === 'stress' ? 0.85 : 1.0;
+  synth.speak(utter);
+}
+
+function detectEnglish(text) {
+  const sample = text.slice(0, 80);
+  const alpha = [...sample].filter(c => /[a-zA-Z]/.test(c)).length;
+  const cjk = [...sample].filter(c => /[一-鿿]/.test(c)).length;
+  return alpha > 10 && cjk === 0;
+}
+
+// ========== UI ==========
+function addMessage(role, text) {
+  const chat = document.getElementById('chatArea');
+  const div = document.createElement('div');
+  div.className = 'chat-msg msg-' + role;
+  if (role === 'interviewer') {
+    div.innerHTML = '<span class="msg-avatar">👔</span><div class="msg-bubble">' +
+      escapeHtml(text).replace(/\n/g, '<br>') + '</div>';
+  } else if (role === 'candidate') {
+    div.innerHTML = '<div class="msg-bubble">' +
+      escapeHtml(text).replace(/\n/g, '<br>') + '</div><span class="msg-avatar">🧑</span>';
+  } else {
+    div.innerHTML = '<div class="msg-bubble msg-system">' +
+      escapeHtml(text) + '</div>';
+  }
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  // 移除加载提示
+  const loading = chat.querySelector('.chat-loading');
+  if (loading) loading.remove();
+}
+
+function showFeedback(msg) {
+  const toast = document.getElementById('feedbackToast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function updateProgress(current, total) {
+  const pct = Math.round((Math.min(current, total) / total) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = current + ' / ' + total;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+async function loadComparison() {
+  try {
+    const resp = await fetch('/api/compare');
+    const data = await resp.json();
+    if (data.has_history) {
+      const div = document.createElement('div');
+      div.className = 'chat-msg msg-system comparison-box';
+      div.innerHTML = '<strong>📊 历史对比</strong><br>' +
+        '上次均分: ' + data.avg_score + ' | 日期: ' + data.date;
+      document.getElementById('chatArea').appendChild(div);
+    }
+  } catch (e) {}
+}
+
+function quitInterview() {
+  if (interviewFinished || confirm('确定要结束面试吗？已答内容会被保存。')) {
+    document.getElementById('textInput').value = '/quit';
+    submitAnswer();
+  }
+}
+
+// 回车发送
+document.getElementById('textInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    submitAnswer();
+  }
+});
+
+// 启动
+startInterview();
+</script>
+</body>
+</html>

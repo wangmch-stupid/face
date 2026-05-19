@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>夏令营模拟面试</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+  <div class="hero">
+    <h1>夏令营模拟面试</h1>
+    <p class="subtitle">AI 驱动的语音对话系统 — 压力面 · 结构化 · 温和引导</p>
+  </div>
+
+  <div class="setup-card">
+    <div class="step">
+      <label class="step-label">面试风格</label>
+      <div class="style-selector">
+        <label class="style-card" id="card-stress">
+          <input type="radio" name="style" value="stress">
+          <div class="style-icon">⚡</div>
+          <div class="style-name">压力面</div>
+          <div class="style-desc">高压追问，咄咄逼人</div>
+        </label>
+        <label class="style-card" id="card-structured">
+          <input type="radio" name="style" value="structured" checked>
+          <div class="style-icon">📋</div>
+          <div class="style-name">结构化评分</div>
+          <div class="style-desc">专业评估，详细报告</div>
+        </label>
+        <label class="style-card" id="card-gentle">
+          <input type="radio" name="style" value="gentle">
+          <div class="style-icon">🌱</div>
+          <div class="style-name">温和引导式</div>
+          <div class="style-desc">温暖包容，循序渐进</div>
+        </label>
+      </div>
+    </div>
+
+    <div class="step">
+      <label class="step-label" for="major">专业方向</label>
+      <select id="major" class="select-input">
+        <option value="计算机">计算机</option>
+        <option value="电子">电子</option>
+        <option value="机械">机械</option>
+        <option value="材料">材料</option>
+        <option value="生物">生物</option>
+        <option value="化学">化学</option>
+        <option value="物理">物理</option>
+        <option value="数学">数学</option>
+        <option value="经管">经管</option>
+        <option value="其他">其他</option>
+      </select>
+      <input type="text" id="customMajor" class="text-input" placeholder="输入自定义专业方向" style="display:none;margin-top:8px;">
+    </div>
+
+    <div class="step">
+      <label class="step-label" for="resume">简历 / 材料（可选）</label>
+      <textarea id="resume" class="textarea-input" rows="5"
+        placeholder="粘贴简历文本，或留空跳过。面试官会根据你的简历个性化提问。"></textarea>
+    </div>
+
+    <button id="startBtn" class="btn-start">开始面试</button>
+  </div>
+
+  <p class="footer-note">全程语音交互，支持 Chrome / Edge 浏览器</p>
+</div>
+
+<script>
+document.querySelectorAll('input[name="style"]').forEach(r => {
+  r.addEventListener('change', () => {
+    document.querySelectorAll('.style-card').forEach(c => c.classList.remove('selected'));
+    r.closest('.style-card').classList.add('selected');
+  });
+});
+// 默认选中结构化
+document.querySelector('#card-structured').classList.add('selected');
+
+document.getElementById('major').addEventListener('change', function() {
+  document.getElementById('customMajor').style.display = this.value === '其他' ? 'block' : 'none';
+});
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  const style = document.querySelector('input[name="style"]:checked').value;
+  let major = document.getElementById('major').value;
+  if (major === '其他') {
+    major = document.getElementById('customMajor').value.trim() || '其他';
+  }
+  const resume = document.getElementById('resume').value.trim();
+
+  localStorage.setItem('interview_config', JSON.stringify({style, major, resume}));
+  window.location.href = '/interview';
+});
+</script>
+</body>
+</html>
