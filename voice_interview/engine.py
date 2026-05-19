@@ -78,6 +78,7 @@ class RuleBasedEngine:
         # 当前维度内的追问计数
         self._followup_count = 0
         self._pending_followups = []
+        self._current_dim = None  # 记录当前问题所属维度，避免回答归属错位
 
     def start(self) -> str:
         """返回开场白"""
@@ -101,6 +102,8 @@ class RuleBasedEngine:
             state.question_index += 1
 
             if question is not None:
+                # 记录当前问题所属维度（在可能推进前保存，防止回答归错维度）
+                self._current_dim = dim
                 # 有有效问题，检查是否需要在本问题后推进维度
                 if self._should_advance_dimension(dim):
                     state.dimension_index += 1
@@ -120,8 +123,8 @@ class RuleBasedEngine:
     def record_answer(self, answer: str):
         """记录候选人的回答，生成追问"""
         state = self.state
-        dim = state.DIMENSIONS[min(state.dimension_index,
-                                    len(state.DIMENSIONS) - 1)]
+        dim = self._current_dim or state.DIMENSIONS[min(state.dimension_index,
+                                                         len(state.DIMENSIONS) - 1)]
 
         state.transcript.append({
             "dimension": dim,
@@ -239,8 +242,16 @@ class RuleBasedEngine:
                 return "Tell me the hardest technical problem you've solved — in English. No prepared scripts. Impress me."
             else:
                 return None
-        else:
-            return None
+        elif self.style == "structured":
+            if qi == 1:
+                return "Now please give a brief self-introduction in English. Please highlight your academic background and research interests. You have about 2 minutes."
+            else:
+                return None
+        else:  # gentle
+            if qi == 1:
+                return "Don't worry about being perfect. Just tell me a bit about yourself in English — your background, what you enjoy studying, anything you'd like to share."
+            else:
+                return None
 
     def _extract_resume_hints(self) -> str:
         """从简历中提取项目相关的关键词"""

@@ -364,12 +364,14 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
 
         # 获取回答
         try:
+            # 英文维度用英文识别，其余用中文
+            stt_lang = "en-US" if current_dim in ("self_intro_en", "english") else "zh-CN"
             if voice_io_enabled:
                 attempt_count = 0
                 retry = True
                 while retry and attempt_count < 2:
                     attempt_count += 1
-                    answer = listen(language="zh-CN", timeout=60)
+                    answer = listen(language=stt_lang, timeout=60)
                     if answer:
                         print(f"\n  📝 识别结果: {answer}")
                         retry = False
@@ -394,6 +396,9 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
             print("\n  👋 你选择结束面试。正在保存记录...")
             engine.state.finished = True
             break
+        elif answer.strip().lower() == "/skip":
+            answer = "(候选人选择跳过此题)"
+            print("  ⏭️  已跳过")
 
         # 记录回答
         try:
