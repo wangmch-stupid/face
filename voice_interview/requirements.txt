@@ -1,0 +1,14 @@
+# TTS 语音输出（必装）
+edge-tts>=6.1.0
+
+# STT 语音输入（语音模式需要）
+sounddevice>=0.4.6
+numpy>=1.24.0
+SpeechRecognition>=3.10.0
+faster-whisper>=1.0.0
+
+# 可选：Claude API 智能追问模式
+# anthropic>=0.30.0
+
+# 可选：直接读取 PDF 简历
+# PyPDF2>=3.0.0

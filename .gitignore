@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual env
+venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp TTS files
+/tmp/
+
+# Transcripts (contain personal interview data)
+transcripts/
+
+# API keys
+.env
+*.env.local

@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(pip install *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('main.py OK'\\); ast.parse\\(open\\('voice_io.py'\\).read\\(\\)\\); print\\('voice_io.py OK'\\); ast.parse\\(open\\('engine.py'\\).read\\(\\)\\); print\\('engine.py OK'\\); ast.parse\\(open\\('config.py'\\).read\\(\\)\\); print\\('config.py OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('config.py', encoding='utf-8'\\).read\\(\\)\\); print\\('config.py OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('voice_io.py', encoding='utf-8'\\).read\\(\\)\\); print\\('voice_io.py OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('engine.py', encoding='utf-8'\\).read\\(\\)\\); print\\('engine.py OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('main.py', encoding='utf-8'\\).read\\(\\)\\); print\\('main.py OK'\\)\")",
+      "Bash(python -m py_compile \"D:/codex/face/voice_interview/config.py\")",
+      "Bash(/c/Users/21364/AppData/Local/Python/bin/python *)",
+      "Bash(start powershell *)",
+      "Bash(cmd.exe *)",
+      "Bash(start notepad.exe)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(start stress-chem *)",
+      "Bash(start 面试 *)",
+      "Bash(start interview *)",
+      "Bash(powershell *)",
+      "Bash(HF_ENDPOINT=https://hf-mirror.com /c/Users/21364/AppData/Local/Python/bin/python *)",
+      "Bash(\"C:/Users/21364/AppData/Local/Python/bin/python.exe\" -c \"import edge_tts; print\\('edge-tts OK'\\)\")",
+      "Bash(\"C:/Users/21364/AppData/Local/Python/bin/python.exe\" -c \"import sounddevice; print\\('sounddevice OK'\\)\")",
+      "Bash(\"C:/Users/21364/AppData/Local/Python/bin/python.exe\" -c \"import speech_recognition; print\\('speech_recognition OK'\\)\")",
+      "Bash(\"C:/Users/21364/AppData/Local/Python/bin/python.exe\" -c \"from faster_whisper import WhisperModel; print\\('faster_whisper OK'\\)\")",
+      "Bash(C:/Users/21364/AppData/Local/Python/bin/python.exe *)",
+      "Bash(git *)",
+      "Bash(gh auth *)"
+    ]
+  }
+}
