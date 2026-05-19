@@ -32,7 +32,8 @@
       "Bash(pkill -f \"python.exe app.py\")",
       "Bash(\"C:/Users/21364/AppData/Local/Python/bin/python.exe\" app.py)",
       "Bash(taskkill //F //IM python.exe)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(cat /tmp/flask3.log)"
     ]
   }
 }

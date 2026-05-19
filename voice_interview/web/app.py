@@ -191,7 +191,11 @@ def compare_history():
 
 
 if __name__ == "__main__":
+    import socket
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
     print("\n  === 夏令营模拟面试 - Web 版 ===")
-    print("  打开浏览器访问: http://127.0.0.1:5000")
+    print(f"  本机访问: http://127.0.0.1:5000")
+    print(f"  局域网访问: http://{local_ip}:5000")
     print("  按 Ctrl+C 停止服务器\n")
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
