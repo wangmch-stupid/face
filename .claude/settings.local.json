@@ -42,7 +42,11 @@
       "Bash(curl -L -o \"D:/ngrok/bore.exe\" \"https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-pc-windows-msvc.tar.gz\")",
       "Bash(ssh -V)",
       "Bash(ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:5000 serveo.net)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N \"\" -q)",
+      "Bash(\"D:/ngrok/bore.exe\" local *)",
+      "Bash(ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R campinterview:80:localhost:5000 serveo.net)",
+      "Bash(\"D:/ngrok/cloudflared.exe\" tunnel *)"
     ]
   }
 }

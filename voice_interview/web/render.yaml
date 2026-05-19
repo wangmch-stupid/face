@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: interview-system
+    env: python
+    buildCommand: pip install flask
+    startCommand: cd voice_interview/web && python app.py
+    envVars:
+      - key: PORT
+        value: 5000
