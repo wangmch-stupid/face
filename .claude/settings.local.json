@@ -33,7 +33,16 @@
       "Bash(\"C:/Users/21364/AppData/Local/Python/bin/python.exe\" app.py)",
       "Bash(taskkill //F //IM python.exe)",
       "Read(//tmp/**)",
-      "Bash(cat /tmp/flask3.log)"
+      "Bash(cat /tmp/flask3.log)",
+      "Bash(mkdir -p \"D:/ngrok\")",
+      "Bash(curl -L -o \"D:/ngrok/ngrok.zip\" \"https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip\")",
+      "Bash(unzip -o \"D:/ngrok/ngrok.zip\" -d \"D:/ngrok/\")",
+      "Bash(\"D:/ngrok/ngrok.exe\" --version)",
+      "Bash(\"D:/ngrok/ngrok.exe\" http *)",
+      "Bash(curl -L -o \"D:/ngrok/bore.exe\" \"https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-pc-windows-msvc.tar.gz\")",
+      "Bash(ssh -V)",
+      "Bash(ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:5000 serveo.net)",
+      "Bash(curl *)"
     ]
   }
 }
