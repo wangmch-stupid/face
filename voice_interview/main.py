@@ -364,6 +364,8 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
                 answer = listen(language="zh-CN", timeout=60)
                 if not answer:
                     answer = input("\n  ⌨️  语音未识别到，请打字回答: ")
+                else:
+                    print(f"\n  📝 识别结果: {answer}")
             else:
                 answer = input("\n你的回答: ")
         except (EOFError, KeyboardInterrupt):

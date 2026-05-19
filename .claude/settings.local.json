@@ -25,7 +25,8 @@
       "Bash(\"C:/Users/21364/AppData/Local/Python/bin/python.exe\" -c \"from faster_whisper import WhisperModel; print\\('faster_whisper OK'\\)\")",
       "Bash(C:/Users/21364/AppData/Local/Python/bin/python.exe *)",
       "Bash(git *)",
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
