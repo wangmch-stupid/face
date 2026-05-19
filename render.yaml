@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: camp-interview
+    env: python
+    region: singapore
+    buildCommand: pip install flask gunicorn
+    startCommand: cd voice_interview/web && gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    plan: free
