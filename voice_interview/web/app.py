@@ -88,6 +88,16 @@ def interview():
     return render_template("interview.html")
 
 
+@app.route("/api/paper/<major>")
+def get_paper_image(major):
+    """返回论文图片的 URL"""
+    filename = f"paper_{major}.png"
+    filepath = os.path.join(app.static_folder, "papers", filename)
+    if os.path.exists(filepath):
+        return jsonify({"image_url": f"/static/papers/{filename}"})
+    return jsonify({"image_url": ""}), 404
+
+
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
     """上传简历文件，返回提取的文本"""

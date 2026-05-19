@@ -38,6 +38,23 @@
   </div>
 
   <div class="voice-status" id="voiceStatus"></div>
+
+<!-- 论文翻译弹窗 -->
+<div class="paper-overlay" id="paperOverlay" style="display:none;">
+  <div class="paper-modal">
+    <div class="paper-header">
+      <span class="paper-label">English Paper Translation</span>
+      <span class="paper-timer" id="paperTimer">05:00</span>
+      <button class="paper-close" onclick="closePaper()">完成翻译，开始回答</button>
+    </div>
+    <div class="paper-body">
+      <img id="paperImage" src="" alt="Academic Paper" style="width:100%;border-radius:4px;">
+    </div>
+    <div class="paper-footer">
+      <span>阅读并准备翻译全文。点击右上角按钮后，逐句翻译成中文。</span>
+    </div>
+  </div>
+</div>
 </div>
 
 <script>
@@ -267,6 +284,102 @@ document.getElementById('textInput').addEventListener('keydown', (e) => {
     submitAnswer();
   }
 });
+
+// ========== 论文翻译弹窗 ==========
+let paperTimerInterval = null;
+let paperSeconds = 300; // 5分钟
+
+function showPaper(dim) {
+  const major = config.major || '计算机';
+  fetch('/api/paper/' + encodeURIComponent(major))
+    .then(r => r.json())
+    .then(data => {
+      if (data.image_url) {
+        document.getElementById('paperImage').src = data.image_url;
+        document.getElementById('paperOverlay').style.display = 'flex';
+        paperSeconds = 300;
+        updateTimerDisplay();
+        paperTimerInterval = setInterval(() => {
+          paperSeconds--;
+          updateTimerDisplay();
+          if (paperSeconds <= 0) {
+            clearInterval(paperTimerInterval);
+            document.getElementById('paperTimer').textContent = '时间到';
+            document.getElementById('paperTimer').style.color = '#f85149';
+          }
+        }, 1000);
+      }
+    });
+}
+
+function updateTimerDisplay() {
+  const m = Math.floor(paperSeconds / 60);
+  const s = paperSeconds % 60;
+  document.getElementById('paperTimer').textContent =
+    String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  if (paperSeconds < 60) {
+    document.getElementById('paperTimer').style.color = '#f85149';
+  }
+}
+
+function closePaper() {
+  document.getElementById('paperOverlay').style.display = 'none';
+  if (paperTimerInterval) {
+    clearInterval(paperTimerInterval);
+    paperTimerInterval = null;
+  }
+  document.getElementById('textInput').placeholder = '请逐句翻译论文内容...';
+  document.getElementById('textInput').focus();
+}
+
+// 修改 submitAnswer 检测英文维度
+const originalSubmitAnswer = submitAnswer;
+// 在接收到新问题后检测英文维度
+async function submitAnswer() {
+  if (interviewFinished) return;
+  const input = document.getElementById('textInput');
+  const answer = input.value.trim();
+  if (!answer) return;
+
+  addMessage('candidate', answer);
+  input.value = '';
+
+  try {
+    const resp = await fetch('/api/answer', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({answer})
+    });
+    const data = await resp.json();
+
+    if (data.finished) {
+      interviewFinished = true;
+      addMessage('interviewer', data.report);
+      speakText('面试结束。请查看你的评估报告。');
+      document.getElementById('progressFill').style.width = '100%';
+      document.getElementById('progressText').textContent = '完成';
+      loadComparison();
+    } else {
+      if (data.feedback) {
+        showFeedback(data.feedback);
+      }
+      if (data.question) {
+        setTimeout(() => {
+          addMessage('interviewer', data.question);
+          speakText(data.question);
+          updateProgress(data.dim_index, data.total_dims);
+          // 检测英文文献维度 → 弹出论文图片
+          if (data.current_dim === 'english') {
+            showPaper(data.current_dim);
+          }
+        }, 500);
+      }
+      updateProgress(data.dim_index, data.total_dims);
+    }
+  } catch (e) {
+    addMessage('system', '网络错误，请重试');
+  }
+}
 
 // 启动
 startInterview();
