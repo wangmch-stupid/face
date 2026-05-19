@@ -601,7 +601,7 @@ class RuleBasedEngine:
                 "self_intro_en": 3,
                 "project": 7,
                 "principle": 6,
-                "basics": 7,  # 1过渡 + 6题
+                "basics": 9,  # 1过渡 + 8题（共12题可用）
                 "core_knowledge": 5,
                 "english": 4,
                 "quality": 6,
