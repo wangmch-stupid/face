@@ -58,13 +58,14 @@ def start_interview():
     _engines[sid] = engine
 
     opening = engine.start()
-    question = _next_with_dim(engine)
+    question, dim_key, dim_label, dim_idx, total = _next_with_dim(engine)
 
     return jsonify({
         "opening": opening,
-        "current_dim": engine._current_dim,
-        "dim_label": engine.state.DIMENSION_LABELS.get(engine._current_dim, ""),
-        "dim_index": engine.state.dimension_index,
+        "current_dim": dim_key,
+        "dim_label": dim_label,
+        "dim_index": dim_idx,
+        "total_dims": total,
         "question": question,
         "finished": False
     })
@@ -102,7 +103,7 @@ def submit_answer():
             "scores": engine.state.scores
         })
 
-    question = _next_with_dim(engine)
+    question, dim_key, dim_label, dim_idx, total = _next_with_dim(engine)
     if question is None:
         report = engine.generate_report()
         engine.save_transcript()
@@ -113,29 +114,44 @@ def submit_answer():
         })
 
     # 获取上一维度的反馈
-    feedback = engine.get_dimension_feedback(engine._current_dim)
+    feedback = engine.get_dimension_feedback(dim_key) if dim_key else ""
 
     return jsonify({
         "finished": False,
-        "current_dim": engine._current_dim,
-        "dim_label": engine.state.DIMENSION_LABELS.get(engine._current_dim, ""),
-        "dim_index": engine.state.dimension_index,
-        "total_dims": len(engine.state.DIMENSIONS),
+        "current_dim": dim_key,
+        "dim_label": dim_label,
+        "dim_index": dim_idx,
+        "total_dims": total,
         "question": question,
         "feedback": feedback or ""
     })
 
 
-def _next_with_dim(engine) -> str:
-    """获取下一个问题（跳过过渡语中的空内容）"""
-    # 跳过纯过渡语（qi=0），直接返回第一个真实问题
-    q = engine.next_question()
-    if q and engine.state.question_index == 1:
-        # 这是过渡语，再取下一个
-        q2 = engine.next_question()
-        if q2:
-            return q2
-    return q
+def _next_with_dim(engine) -> tuple:
+    """获取下一个有效问题，返回 (question, dim_key, dim_label, dim_index, total_dims)
+    自动跳过过渡语和维度切换的 None"""
+    total = len(engine.state.DIMENSIONS)
+    while not engine.is_finished():
+        q = engine.next_question()
+        if q is None:
+            if engine.is_finished():
+                return None, "", "", 0, total
+            continue
+        # 保存 _current_dim（在 next_question 内部已锁定，不受 advance 影响）
+        dim = engine._current_dim
+        label = engine.state.DIMENSION_LABELS.get(dim, dim)
+        dim_idx = engine.state.DIMENSIONS.index(dim) if dim in engine.state.DIMENSIONS else 0
+        # 跳过纯过渡语（qi=0）
+        if engine.state.question_index == 1:
+            q2 = engine.next_question()
+            if q2:
+                dim2 = engine._current_dim
+                label2 = engine.state.DIMENSION_LABELS.get(dim2, dim2)
+                dim_idx2 = engine.state.DIMENSIONS.index(dim2) if dim2 in engine.state.DIMENSIONS else 0
+                return q2, dim2, label2, dim_idx2, total
+            continue
+        return q, dim, label, dim_idx, total
+    return None, "", "", 0, total
 
 
 @app.route("/api/compare", methods=["GET"])
