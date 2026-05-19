@@ -80,6 +80,11 @@ class RuleBasedEngine:
         self._pending_followups = []
         self._current_dim = None  # 记录当前问题所属维度，避免回答归属错位
 
+        # 自适应难度追踪
+        self._basics_correct = 0    # 专业基础连续答对数
+        self._basics_weak = []      # 弱项话题列表
+        self._basics_hints_given = 0  # 已给提示次数
+
     def start(self) -> str:
         """返回开场白"""
         return self.config["opening"]
@@ -134,12 +139,58 @@ class RuleBasedEngine:
         })
         state.answers.setdefault(dim, []).append(answer)
 
+        # 专业基础维度：自适应评估
+        if dim == "basics":
+            self._evaluate_basics(answer)
+
         # 根据风格决定是否生成追问
         followups = self._generate_followups(dim, answer)
         self._pending_followups.extend(followups)
 
     def is_finished(self) -> bool:
         return self.state.finished
+
+    def get_dimension_feedback(self, dim: str) -> str:
+        """结构化模式：每个维度结束时的即时反馈（返回分数+简短评语）"""
+        if self.style != "structured":
+            return ""
+
+        answers = self.state.answers.get(dim, [])
+        if not answers:
+            return ""
+
+        # 基于回答长度和追问情况做启发式评分
+        total_len = sum(len(a) for a in answers)
+        count = len(answers)
+        avg_len = total_len / count
+
+        if avg_len > 200:
+            score = 8.5
+            comment = "回答详实，有深度"
+        elif avg_len > 100:
+            score = 7.0
+            comment = "回答完整，可以更深入"
+        elif avg_len > 50:
+            score = 5.5
+            comment = "回答偏简略，建议展开"
+        else:
+            score = 4.0
+            comment = "回答过于简短，需要充实"
+
+        # 如果包含很多不确定词，降分
+        uncertain = sum(1 for a in answers
+                       if any(w in a for w in ["可能", "大概", "应该", "好像", "也许", "不太确定"]))
+        if uncertain > 0:
+            score -= 0.5
+
+        # 如果被跳过
+        if any("(候选人选择跳过" in a for a in answers):
+            score = 3.0
+            comment = "未作答"
+
+        dim_label = self.state.DIMENSION_LABELS.get(dim, dim)
+        self.state.scores[dim] = score  # 存储以便最终报告使用
+        return f"    [{dim_label} 即时评分: {score:.1f}/10] {comment}"
 
     def generate_report(self) -> str:
         """生成面试结束报告"""
@@ -192,6 +243,17 @@ class RuleBasedEngine:
                         transition = f"{transition}\n\n(你简历里提到了 {techs}，挑一个你拿手的项目来谈。)"
                     else:
                         transition = f"{transition}\n\n(我看了你的简历，挑一个最有代表性的项目来介绍。)"
+                # STAR 法则引导
+                if self.style == "structured":
+                    transition += "\n\n💡 建议用 STAR 法则组织回答：情境 → 任务 → 行动 → 结果"
+                elif self.style == "gentle":
+                    transition += "\n\n💡 可以按这个顺序讲：当时什么情况 → 你要做什么 → 你具体做了什么 → 最后结果怎样"
+                elif self.style == "stress":
+                    transition += "\n\n结构：背景、你做了什么、结果。每个部分30秒，别啰嗦。"
+
+            # 综合素质维度：STAR 引导
+            if dim == "quality" and self.style != "stress":
+                transition += "\n\n💡 行为类问题也适合用 STAR 法则来回答"
             state.transcript.append({
                 "dimension": dim,
                 "role": "interviewer",
@@ -492,6 +554,38 @@ class RuleBasedEngine:
 
         return followups[:2]  # 每次最多2个追问
 
+    def _evaluate_basics(self, answer: str):
+        """评估专业基础回答质量，用于自适应难度"""
+        # 明显不会 / 跳过 / 太短
+        weak_signals = ["不知道", "不会", "不清楚", "不了解", "没学过", "忘记了"]
+        is_weak = (len(answer) < 25 or
+                   answer.startswith("(候选人") or
+                   any(s in answer for s in weak_signals))
+
+        # 答得好的信号：长篇 + 含技术术语
+        is_strong = len(answer) > 120
+
+        if is_weak:
+            self._basics_correct = 0
+            qi = self.state.question_index
+            # 获取当前问题的主题
+            major_basics = MAJOR_BASICS.get(self.state.major, MAJOR_BASICS["计算机"])
+            keys = list(major_basics.keys())
+            if qi - 1 < len(keys):
+                topic, _ = major_basics[keys[qi - 1]]
+                if topic not in self._basics_weak:
+                    self._basics_weak.append(topic)
+            # 给提示
+            if self._basics_hints_given < 3:
+                self._pending_followups.append(
+                    "💡 提示：可以从基本定义出发，再谈谈应用场景。不会也没关系，说说你知道的部分就好。"
+                )
+                self._basics_hints_given += 1
+        elif is_strong:
+            self._basics_correct += 1
+        else:
+            self._basics_correct = max(0, self._basics_correct - 1)  # 答得一般，重置计数
+
     def _should_advance_dimension(self, dim: str) -> bool:
         """
         判断是否应该进入下一个维度
@@ -535,6 +629,11 @@ class RuleBasedEngine:
         }
 
         max_q = max_questions.get(style, {}).get(dim, 3)
+
+        # 专业基础自适应：连续答对 2 题可提前结束
+        if dim == "basics" and self._basics_correct >= 2 and qi >= 4:
+            return True
+
         return qi >= max_q
 
     # ================================================================
@@ -634,7 +733,9 @@ class RuleBasedEngine:
         1. 项目描述的颗粒度不够细，需要更多具体的"我做了什么"。
         2. 原理层面的理解可以更深入，建议针对项目用到的核心技术
            做更深入的文献调研。
-        3. 英文表达的流利度和专业词汇量需要持续积累。
+        3. 英文表达的流利度和专业词汇量需要持续积累。""" + (
+            f"\n        4. 专业基础中的弱项：{', '.join(self._basics_weak)}。建议重点复习。" if self._basics_weak else ""
+        ) + """
 
         ── 针对性备考建议 ──
         短期（1周内）：针对简历上每个项目，写出3分钟的"电梯演讲"稿。

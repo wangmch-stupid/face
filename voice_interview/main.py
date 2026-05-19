@@ -306,6 +306,81 @@ def _detect_english(text: str) -> bool:
     return ascii_alpha / alpha_chars > 0.8 and ascii_alpha >= 5
 
 
+def _compare_with_history(engine):
+    """与最近一次历史面试记录对比，显示进步趋势"""
+    import json
+    import glob
+    from datetime import datetime
+
+    transcripts_dir = os.path.join(os.path.dirname(__file__), "transcripts")
+    if not os.path.isdir(transcripts_dir):
+        return
+
+    files = sorted(glob.glob(os.path.join(transcripts_dir, "interview_*.json")),
+                   reverse=True)
+    if len(files) < 2:
+        return  # 只有当前这次，无法对比
+
+    # 读取上一次的记录
+    prev_path = files[1]  # 最新的 files[0] 是本次刚保存的
+    try:
+        with open(prev_path, "r", encoding="utf-8") as f:
+            prev = json.load(f)
+    except Exception:
+        return
+
+    prev_scores = prev.get("scores", {})
+    curr_scores = engine.state.scores
+    prev_style = prev.get("style", "")
+
+    # 只同风格对比
+    if prev_style != engine.style:
+        return
+
+    # 计算总分变化
+    if not prev_scores or not curr_scores:
+        return
+
+    prev_total = sum(prev_scores.values())
+    curr_total = sum(curr_scores.values())
+    dims = [d for d in curr_scores if d in prev_scores]
+    if not dims:
+        return
+
+    prev_avg = sum(prev_scores[d] for d in dims) / len(dims)
+    curr_avg = sum(curr_scores[d] for d in dims) / len(dims)
+    delta = curr_avg - prev_avg
+
+    prev_date = os.path.basename(prev_path).replace("interview_", "").replace(".json", "")
+    prev_date_fmt = f"{prev_date[:4]}-{prev_date[4:6]}-{prev_date[6:8]} {prev_date[9:11]}:{prev_date[11:13]}"
+
+    if delta > 0.5:
+        trend = "📈 进步显著"
+    elif delta > 0:
+        trend = "📈 稳中有升"
+    elif delta > -0.5:
+        trend = "📊 基本持平"
+    else:
+        trend = "📉 略有退步"
+
+    print(f"\n{'─' * 50}")
+    print(f"  📊 历史对比（上次: {prev_date_fmt}）")
+    print(f"  上次均分: {prev_avg:.1f} → 本次均分: {curr_avg:.1f}  {trend} ({delta:+.1f})")
+
+    # 维度级别对比
+    changed = []
+    for d in dims:
+        d_delta = curr_scores[d] - prev_scores[d]
+        if abs(d_delta) > 0.5:
+            arrow = "↑" if d_delta > 0 else "↓"
+            changed.append(f"  {arrow} {d}: {prev_scores[d]:.1f} → {curr_scores[d]:.1f} ({d_delta:+.1f})")
+    if changed:
+        print("  维度变化：")
+        for line in changed:
+            print(line)
+    print(f"{'─' * 50}")
+
+
 # ============================================================
 # 面试主循环
 # ============================================================
@@ -339,6 +414,11 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
                        else engine.state.DIMENSIONS[-1])
         if current_dim_idx < len(engine.state.DIMENSIONS):
             if current_dim != last_dim:
+                # 上一个维度结束时给出即时反馈（非首维）
+                if last_dim is not None:
+                    feedback = engine.get_dimension_feedback(last_dim)
+                    if feedback:
+                        print(f"\n{feedback}\n")
                 total = len(engine.state.DIMENSIONS)
                 dim_num = current_dim_idx + 1
                 progress_bar = "█" * dim_num + "░" * (total - dim_num)
@@ -419,6 +499,9 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
 
     # 保存记录
     engine.save_transcript()
+
+    # 历史对比
+    _compare_with_history(engine)
 
     print("\n感谢使用夏令营模拟面试系统！")
 
