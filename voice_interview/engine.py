@@ -9,7 +9,7 @@ import re
 import textwrap
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Optional, Callable
+from typing import Optional
 
 from config import (
     MAJOR_BASICS,
@@ -258,10 +258,8 @@ class RuleBasedEngine:
         resume = self.state.resume
         if not resume or resume.startswith("(跳过") or resume.startswith("(未提交"):
             return ""
-        # 取前 300 字，找可能的项目名或技术关键词
         snippet = resume[:300]
         # 提取英文技术词（大写/驼峰/缩写）
-        import re
         tech_words = re.findall(r'\b[A-Z][a-zA-Z0-9\+#\-]{2,}\b', snippet)
         # 提取中文项目相关词
         cn_projects = re.findall(r'[「《]([^》」]{2,20})[》」]', snippet)

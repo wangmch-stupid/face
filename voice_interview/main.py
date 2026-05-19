@@ -334,8 +334,10 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
 
         # 检测是否进入新维度
         current_dim_idx = engine.state.dimension_index
+        current_dim = (engine.state.DIMENSIONS[current_dim_idx]
+                       if current_dim_idx < len(engine.state.DIMENSIONS)
+                       else engine.state.DIMENSIONS[-1])
         if current_dim_idx < len(engine.state.DIMENSIONS):
-            current_dim = engine.state.DIMENSIONS[current_dim_idx]
             if current_dim != last_dim:
                 total = len(engine.state.DIMENSIONS)
                 dim_num = current_dim_idx + 1

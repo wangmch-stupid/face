@@ -43,6 +43,10 @@ DEFAULT_EN_VOICE = "en-US-JennyNeural"
 # 当前激活的 TTS 预设
 _current_style = "structured"
 
+# TTS 连续失败计数（连续失败 3 次自动禁用）
+_tts_fail_count = 0
+_tts_disabled = False
+
 
 def set_tts_style(style: str):
     """切换 TTS 风格预设"""
@@ -54,6 +58,11 @@ def set_tts_style(style: str):
 async def _speak_edge_tts(text: str, voice: str = None, rate: str = "+0%",
                           pitch: str = "+0Hz", is_english: bool = False):
     """使用 edge-tts 生成语音并播放"""
+    global _tts_fail_count, _tts_disabled
+
+    if _tts_disabled:
+        return
+
     if voice is None:
         preset = STYLE_VOICE_PRESETS.get(_current_style, STYLE_VOICE_PRESETS["structured"])
         lang = "en" if is_english else "zh"
@@ -63,6 +72,7 @@ async def _speak_edge_tts(text: str, voice: str = None, rate: str = "+0%",
         import edge_tts
     except ImportError:
         print("[错误] 请先安装 edge-tts: pip install edge-tts")
+        _tts_disabled = True
         return
 
     communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
@@ -72,15 +82,15 @@ async def _speak_edge_tts(text: str, voice: str = None, rate: str = "+0%",
     try:
         await asyncio.wait_for(communicate.save(tmp_path), timeout=30)
     except asyncio.TimeoutError:
-        print(f"[TTS 超时] 网络请求超过 30 秒，跳过语音")
+        _handle_tts_fail("网络超时")
         return
     except Exception as e:
-        print(f"[TTS 生成失败] {e}")
+        _handle_tts_fail(str(e))
         return
 
     # 校验文件有效
     if os.path.getsize(tmp_path) < 100:
-        print(f"[TTS 生成失败] 音频数据为空或过短")
+        _handle_tts_fail("音频数据为空")
         try:
             os.remove(tmp_path)
         except Exception:
@@ -90,11 +100,25 @@ async def _speak_edge_tts(text: str, voice: str = None, rate: str = "+0%",
     # 播放音频
     _play_audio(tmp_path)
 
+    # 成功后重置失败计数
+    _tts_fail_count = 0
+
     # 清理
     try:
         os.remove(tmp_path)
     except Exception:
         pass
+
+
+def _handle_tts_fail(reason: str):
+    """TTS 失败处理：计数 + 连续 3 次自动禁用"""
+    global _tts_fail_count, _tts_disabled
+    _tts_fail_count += 1
+    if _tts_fail_count >= 3:
+        _tts_disabled = True
+        print(f"[TTS 已自动禁用] 连续 {_tts_fail_count} 次失败 ({reason})，后续将静默跳过语音")
+    else:
+        print(f"[TTS 失败 ({_tts_fail_count}/3)] {reason}")
 
 
 def _play_audio(file_path: str):
@@ -278,6 +302,7 @@ def listen(language: str = "zh-CN", timeout: int = 10) -> str:
     import threading
     recording_flag = [True]
     audio_chunks = []
+    record_error = [None]
 
     def _record_thread():
         try:
@@ -286,8 +311,8 @@ def listen(language: str = "zh-CN", timeout: int = 10) -> str:
                 while recording_flag[0]:
                     data, _ = stream.read(1600)
                     audio_chunks.append(data.copy())
-        except Exception:
-            pass
+        except Exception as e:
+            record_error[0] = str(e)
 
     rec_thread = threading.Thread(target=_record_thread, daemon=True)
     rec_thread.start()
@@ -317,6 +342,10 @@ def listen(language: str = "zh-CN", timeout: int = 10) -> str:
     recording_flag[0] = False
     rec_thread.join(timeout=2)
     print("\r" + " " * 60 + "\r", end="")  # 清除倒计时行
+
+    if record_error[0]:
+        print(f"  ⚠️  录音设备异常: {record_error[0]}")
+        return ""
 
     if not audio_chunks:
         print("\n  ⏰ 未检测到录音。")
