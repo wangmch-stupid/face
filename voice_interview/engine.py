@@ -180,11 +180,18 @@ class RuleBasedEngine:
         # 过渡语（每个维度第一次进入时）
         if qi == 0:
             transition = self.config["transitions"].get(dim, "")
-            # 项目维度：如果有简历，引用简历中的关键词
+            # 项目维度：如果有简历，个性化过渡语
             if dim == "project":
                 hints = self._extract_resume_hints()
-                if hints:
-                    transition += f"\n\n(我注意到你的简历中提到了 {hints}，请围绕这些来谈。)"
+                if hints["has_resume"]:
+                    if hints["project_names"]:
+                        proj = hints["project_names"][0]
+                        transition = f"{transition}\n\n(我注意到你参与过《{proj}》，就从它开始说吧。)"
+                    elif hints["tech_words"]:
+                        techs = "、".join(hints["tech_words"][:3])
+                        transition = f"{transition}\n\n(你简历里提到了 {techs}，挑一个你拿手的项目来谈。)"
+                    else:
+                        transition = f"{transition}\n\n(我看了你的简历，挑一个最有代表性的项目来介绍。)"
             state.transcript.append({
                 "dimension": dim,
                 "role": "interviewer",
@@ -253,22 +260,59 @@ class RuleBasedEngine:
             else:
                 return None
 
-    def _extract_resume_hints(self) -> str:
-        """从简历中提取项目相关的关键词"""
+    def _extract_resume_hints(self) -> dict:
+        """从简历中提取项目相关的关键词，返回结构化信息"""
         resume = self.state.resume
+        result = {"has_resume": False, "tech_words": [], "project_names": [],
+                  "keywords": [], "summary": ""}
+
         if not resume or resume.startswith("(跳过") or resume.startswith("(未提交"):
-            return ""
-        snippet = resume[:300]
-        # 提取英文技术词（大写/驼峰/缩写）
+            return result
+
+        result["has_resume"] = True
+        snippet = resume[:500]
+
+        # 提取英文技术词（大写/驼峰/缩写，至少3字符）
         tech_words = re.findall(r'\b[A-Z][a-zA-Z0-9\+#\-]{2,}\b', snippet)
-        # 提取中文项目相关词
-        cn_projects = re.findall(r'[「《]([^》」]{2,20})[》」]', snippet)
-        keywords = list(set(tech_words[:3] + cn_projects[:2]))
-        return "、".join(keywords) if keywords else ""
+        # 过滤通用词
+        generic = {"The", "This", "That", "With", "From", "They", "Their",
+                   "These", "Those", "About", "Using", "Based", "However",
+                   "Introduction", "Conclusion", "Abstract", "References",
+                   "University", "College", "School", "Department"}
+        tech_words = [w for w in tech_words if w not in generic]
+        result["tech_words"] = list(dict.fromkeys(tech_words))[:5]  # 去重保留前5
+
+        # 提取中文书名号/引号中的项目名
+        cn_projects = re.findall(r'[「《『]([^》」』]{2,30})[》」』]', snippet)
+        result["project_names"] = list(dict.fromkeys(cn_projects))[:3]
+
+        # 汇总关键词
+        keywords = result["tech_words"][:3] + result["project_names"][:2]
+        result["keywords"] = keywords
+        result["summary"] = "、".join(keywords) if keywords else ""
+        return result
 
     def _project_question(self, qi: int) -> str:
         """项目经历追问"""
-        resume = self.state.resume
+        hints = self._extract_resume_hints()
+        techs = "、".join(hints["tech_words"][:2]) if hints["tech_words"] else ""
+        proj = hints["project_names"][0] if hints["project_names"] else ""
+
+        # 第一条追问（qi=1）：如果有关键词则个性化，否则用默认
+        if qi == 1 and techs:
+            if self.style == "stress":
+                return f"你说你会{techs}——到什么程度？调包还是能改底层？别吹牛。"
+            elif self.style == "structured":
+                return f"我看到你提到了{techs}相关的经验。在这个项目里，你个人独立完成的技术部分占多少？请具体说明。"
+            else:
+                return f"你刚才提到了{techs}，我很好奇你是怎么开始接触这个方向的？有什么故事吗？"
+        elif qi == 1 and proj:
+            if self.style == "stress":
+                return f"《{proj}》这个项目——你在里面到底做了什么？不要说'我们'，说你个人。"
+            elif self.style == "structured":
+                return f"关于《{proj}》，请具体说明你个人独立完成的部分，以及遇到的最大技术挑战。"
+            else:
+                return f"《{proj}》听起来很有意思！这个项目是怎么开始的？是你主动发起的吗？"
 
         if self.style == "stress":
             followups = [
@@ -290,16 +334,16 @@ class RuleBasedEngine:
             ]
         else:  # gentle
             followups = [
-                "这个项目是怎么开始的？是你主动发起的还是导师安排的？我很好奇。",
                 "在这个过程里，你觉得最有意思的部分是什么？有没有哪个瞬间让你觉得'啊，原来是这样'？",
                 "你个人花时间最多的环节是什么？为什么花那么多时间？",
                 "过程中有没有遇到过让你很头疼的问题？后来怎么解决的呢？",
                 "做完这个项目之后，你觉得自己最大的变化是什么？",
             ]
 
-        idx = min(qi - 1, len(followups) - 1)
+        # qi=1 已由个性化追问处理，qi>=2 从 followups[0] 开始取
+        idx = min(qi - 2, len(followups) - 1)
         if idx < 0:
-            return followups[0]
+            return followups[0] if followups else None
         return followups[idx] if idx < len(followups) else None
 
     def _principle_question(self, qi: int) -> str:
