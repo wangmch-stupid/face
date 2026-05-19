@@ -57,8 +57,14 @@
 
     <div class="step">
       <label class="step-label" for="resume">简历 / 材料（可选）</label>
+      <div class="upload-row">
+        <label class="btn-upload" for="fileUpload">📎 上传文件</label>
+        <input type="file" id="fileUpload" accept=".pdf,.txt,.md,.doc,.docx"
+          onchange="handleFileUpload(this)">
+        <span id="uploadStatus" class="upload-status"></span>
+      </div>
       <textarea id="resume" class="textarea-input" rows="5"
-        placeholder="粘贴简历文本，或留空跳过。面试官会根据你的简历个性化提问。"></textarea>
+        placeholder="粘贴简历文本，或上传文件自动填充。面试官会根据你的简历个性化提问。"></textarea>
     </div>
 
     <button id="startBtn" class="btn-start">开始面试</button>
@@ -80,6 +86,27 @@ document.querySelector('#card-structured').classList.add('selected');
 document.getElementById('major').addEventListener('change', function() {
   document.getElementById('customMajor').style.display = this.value === '其他' ? 'block' : 'none';
 });
+
+async function handleFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('uploadStatus');
+  status.textContent = '读取中...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.error) {
+      status.textContent = '错误: ' + data.error;
+    } else {
+      document.getElementById('resume').value = data.text;
+      status.textContent = file.name + ' (' + data.length + ' 字)';
+    }
+  } catch (e) {
+    status.textContent = '上传失败';
+  }
+}
 
 document.getElementById('startBtn').addEventListener('click', async () => {
   const style = document.querySelector('input[name="style"]:checked').value;

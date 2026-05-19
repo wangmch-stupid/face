@@ -13,9 +13,60 @@ from engine import RuleBasedEngine
 from config import MAJOR_BASICS
 
 from flask import Flask, render_template, request, jsonify, session
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24).hex()
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
+
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+
+def _read_uploaded_file(filepath: str) -> str:
+    """读取上传的文件（PDF/TXT），返回文本内容"""
+    ext = os.path.splitext(filepath)[1].lower()
+
+    if ext == '.pdf':
+        # 尝试 pymupdf
+        try:
+            import fitz
+            doc = fitz.open(filepath)
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            doc.close()
+            return text.strip() or "[PDF 内容为空]"
+        except ImportError:
+            pass
+        except Exception:
+            pass
+        # 尝试 PyPDF2
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(filepath)
+            text = ""
+            for page in reader.pages:
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
+            return text.strip() or "[PDF 内容为空]"
+        except ImportError:
+            return "[无法读取 PDF：服务器未安装 PDF 解析库]"
+        except Exception as e:
+            return f"[PDF 读取失败: {e}]"
+
+    # 文本文件
+    encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1']
+    for enc in encodings:
+        try:
+            with open(filepath, 'r', encoding=enc) as f:
+                return f.read()
+        except UnicodeDecodeError:
+            continue
+        except Exception:
+            break
+    return "[文件编码无法识别]"
 
 # 存储引擎实例（每个会话一个）
 _engines = {}
@@ -35,6 +86,34 @@ def index():
 @app.route("/interview")
 def interview():
     return render_template("interview.html")
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload_file():
+    """上传简历文件，返回提取的文本"""
+    if 'file' not in request.files:
+        return jsonify({"error": "未选择文件"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "文件名为空"}), 400
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    try:
+        text = _read_uploaded_file(filepath)
+        return jsonify({
+            "filename": filename,
+            "text": text,
+            "length": len(text)
+        })
+    finally:
+        try:
+            os.remove(filepath)
+        except Exception:
+            pass
 
 
 @app.route("/api/start", methods=["POST"])
