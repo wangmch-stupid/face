@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>面试中 — 夏令营模拟面试</title>
+<title>面试中 — 模拟面试</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="interview-container">
   <!-- 顶部栏 -->
   <div class="top-bar">
-    <span class="top-title">夏令营模拟面试</span>
+    <span class="top-title">模拟面试</span>
     <span class="top-style" id="styleBadge"></span>
     <button class="btn-quit" onclick="quitInterview()">结束面试</button>
   </div>
@@ -39,6 +39,7 @@
     <input type="text" id="textInput" class="text-input chat-input"
       placeholder="输入你的回答... (支持 /skip 跳过 /quit 结束)">
     <button class="btn-send" id="sendBtn" onclick="submitAnswer()">发送</button>
+    <button class="btn-give-up" id="giveUpBtn" onclick="giveUpEnglish()" style="display:none;">放弃此环节</button>
   </div>
 
   <div class="voice-status" id="voiceStatus"></div>
@@ -50,6 +51,7 @@
       <span class="paper-label">English Paper Translation</span>
       <span class="paper-timer" id="paperTimer">05:00</span>
       <button class="paper-close" onclick="closePaper()">完成翻译，开始回答</button>
+      <button class="paper-give-up" onclick="giveUpEnglish()">放弃翻译</button>
     </div>
     <div class="paper-body">
       <img id="paperImage" src="" alt="Academic Paper" style="width:100%;border-radius:4px;">
@@ -68,6 +70,8 @@ let isRecording = false;
 let recognition = null;
 let synth = window.speechSynthesis;
 let config = JSON.parse(localStorage.getItem('interview_config') || '{}');
+let paperShown = false;
+let currentDim = '';
 
 const styleNames = {stress: '压力面', structured: '结构化评分', gentle: '温和引导式'};
 document.getElementById('styleBadge').textContent = styleNames[config.style] || '';
@@ -100,52 +104,9 @@ async function startInterview() {
   }
 }
 
-// ========== 提交回答 ==========
-async function submitAnswer() {
-  if (interviewFinished) return;
-  const input = document.getElementById('textInput');
-  const answer = input.value.trim();
-  if (!answer) return;
-
-  addMessage('candidate', answer);
-  input.value = '';
-
-  try {
-    const resp = await fetch('/api/answer', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({answer})
-    });
-    const data = await resp.json();
-
-    if (data.finished) {
-      interviewFinished = true;
-      addMessage('interviewer', data.report);
-      speakText('面试结束。请查看你的评估报告。');
-      document.getElementById('progressBar').style.width = '100%';
-      document.getElementById('progressText').textContent = '完成';
-      loadComparison();
-    } else {
-      // 反馈
-      if (data.feedback) {
-        showFeedback(data.feedback);
-      }
-      // 下一个问题
-      if (data.question) {
-        setTimeout(() => {
-          addMessage('interviewer', data.question);
-          speakText(data.question);
-          updateProgress(data.dim_index, data.total_dims);
-        }, 500);
-      }
-      updateProgress(data.dim_index, data.total_dims);
-    }
-  } catch (e) {
-    addMessage('system', '网络错误，请重试');
-  }
-}
-
 // ========== 语音输入 ==========
+let voiceStoppedByUser = false;
+
 function toggleVoice() {
   if (isRecording) {
     stopVoice();
@@ -161,9 +122,11 @@ function startVoice() {
     return;
   }
 
+  voiceStoppedByUser = false;
   recognition = new SpeechRecognition();
   recognition.lang = 'zh-CN';
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
@@ -173,22 +136,47 @@ function startVoice() {
   };
 
   recognition.onresult = (event) => {
-    const text = event.results[0][0].transcript;
-    document.getElementById('textInput').value = text;
-    document.getElementById('voiceStatus').textContent = '📝 ' + text;
+    let finalText = '';
+    let interimText = '';
+    for (let i = 0; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        finalText += event.results[i][0].transcript;
+      } else {
+        interimText += event.results[i][0].transcript;
+      }
+    }
+    const displayText = finalText + interimText;
+    if (displayText) {
+      document.getElementById('textInput').value = displayText;
+      document.getElementById('voiceStatus').textContent = '📝 ' + displayText;
+    }
   };
 
   recognition.onerror = (event) => {
+    if (event.error === 'no-speech') {
+      document.getElementById('voiceStatus').textContent = '🔇 未检测到语音，请继续说话...';
+      return;
+    }
+    if (event.error === 'aborted') return;
     isRecording = false;
     document.getElementById('micBtn').classList.remove('recording');
     document.getElementById('voiceStatus').textContent = '⚠️ 识别失败: ' + event.error;
   };
 
   recognition.onend = () => {
-    isRecording = false;
-    document.getElementById('micBtn').classList.remove('recording');
-    if (document.getElementById('voiceStatus').textContent.startsWith('🔴')) {
-      document.getElementById('voiceStatus').textContent = '';
+    if (voiceStoppedByUser) {
+      isRecording = false;
+      document.getElementById('micBtn').classList.remove('recording');
+      return;
+    }
+    // 自动重启：浏览器可能因静默而停止，用户未主动停止时自动恢复
+    if (isRecording) {
+      try {
+        recognition.start();
+      } catch (e) {
+        isRecording = false;
+        document.getElementById('micBtn').classList.remove('recording');
+      }
     }
   };
 
@@ -196,8 +184,9 @@ function startVoice() {
 }
 
 function stopVoice() {
+  voiceStoppedByUser = true;
   if (recognition) {
-    recognition.stop();
+    try { recognition.stop(); } catch (e) {}
     isRecording = false;
     document.getElementById('micBtn').classList.remove('recording');
   }
@@ -306,16 +295,22 @@ function showPaper(dim) {
         document.getElementById('paperOverlay').style.display = 'flex';
         paperSeconds = 300;
         updateTimerDisplay();
+        if (paperTimerInterval) clearInterval(paperTimerInterval);
         paperTimerInterval = setInterval(() => {
           paperSeconds--;
           updateTimerDisplay();
           if (paperSeconds <= 0) {
             clearInterval(paperTimerInterval);
+            paperTimerInterval = null;
             document.getElementById('paperTimer').textContent = '时间到';
             document.getElementById('paperTimer').style.color = '#f85149';
           }
         }, 1000);
+      } else {
+        addMessage('system', '未找到该专业的论文图片，请直接阅读题目中的文献文本进行翻译。');
       }
+    }).catch(e => {
+      addMessage('system', '加载论文图片失败，请直接阅读题目中的文献文本进行翻译。');
     });
 }
 
@@ -339,6 +334,30 @@ function closePaper() {
   document.getElementById('textInput').focus();
 }
 
+function giveUpEnglish() {
+  if (confirm('确定要放弃英文文献翻译吗？将直接跳到下一环节。')) {
+    document.getElementById('paperOverlay').style.display = 'none';
+    if (paperTimerInterval) {
+      clearInterval(paperTimerInterval);
+      paperTimerInterval = null;
+    }
+    document.getElementById('textInput').value = '放弃翻译';
+    speakText('好的，跳过文献翻译环节。');
+    setTimeout(() => {
+      submitAnswer();
+    }, 1200);
+  }
+}
+
+function updateGiveUpButton(dim) {
+  const btn = document.getElementById('giveUpBtn');
+  if (dim === 'english') {
+    btn.style.display = 'inline-block';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
 // ========== 题目计时器 ==========
 let questionTimerInterval = null;
 let questionSeconds = 0;
@@ -354,6 +373,8 @@ function startQuestionTimer(seconds) {
       clearQuestionTimer();
       document.getElementById('timerCount').textContent = '超时';
       document.getElementById('timerDisplay').classList.add('timeout');
+      // 自动提交超时
+      autoTimeout();
     }
   }, 1000);
 }
@@ -364,6 +385,26 @@ function clearQuestionTimer() {
     questionTimerInterval = null;
   }
   document.getElementById('timerDisplay').classList.remove('timeout');
+}
+
+let timeoutSubmitting = false;
+function autoTimeout() {
+  if (interviewFinished || timeoutSubmitting) return;
+  timeoutSubmitting = true;
+  // 立即停止语音识别
+  if (isRecording) {
+    voiceStoppedByUser = true;
+    try { recognition.stop(); } catch (e) {}
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+  }
+  addMessage('system', '⏰ 时间到，自动提交');
+  document.getElementById('textInput').value = '(超时未作答)';
+  // TTS 播报"时间到"，然后提交
+  speakText('时间到。');
+  setTimeout(() => {
+    submitAnswer().then(() => { timeoutSubmitting = false; });
+  }, 1200);
 }
 
 function updateQuestionTimerDisplay() {
@@ -378,7 +419,7 @@ function updateQuestionTimerDisplay() {
   }
 }
 
-// 修改 submitAnswer 检测英文维度 + 启动计时器
+
 async function submitAnswer() {
   if (interviewFinished) return;
   const input = document.getElementById('textInput');
@@ -408,17 +449,22 @@ async function submitAnswer() {
         showFeedback(data.feedback);
       }
       if (data.question) {
+        currentDim = data.current_dim;
+        updateGiveUpButton(currentDim);
+        // 检测英文文献维度 → 弹出论文图片（只弹一次）
+        if (data.current_dim === 'english' && !paperShown) {
+          paperShown = true;
+          showPaper(data.current_dim);
+        }
         setTimeout(() => {
           addMessage('interviewer', data.question);
-          speakText(data.question);
+          // 英文文献太长，跳过语音朗读
+          if (data.current_dim !== 'english') {
+            speakText(data.question);
+          }
           updateProgress(data.dim_index, data.total_dims);
-          // 启动计时器
           if (data.time_limit) {
             startQuestionTimer(data.time_limit);
-          }
-          // 检测英文文献维度 → 弹出论文图片
-          if (data.current_dim === 'english') {
-            showPaper(data.current_dim);
           }
         }, 500);
       }

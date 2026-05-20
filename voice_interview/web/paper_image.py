@@ -1,8 +1,9 @@
 """
 论文图片生成器 — 生成学术期刊风格的文献截图
-用于夏令营面试的英文文献翻译环节（模拟真实论文阅读体验）
+用于模拟面试的英文文献翻译环节（模拟真实论文阅读体验）
 """
 import os
+import random
 import sys
 import textwrap
 from pathlib import Path
@@ -36,6 +37,8 @@ def generate_paper_image(major: str, width: int = 1200, height: int = 1000) -> s
     data = MAJOR_PAPER_ABSTRACTS.get(major)
     if not data:
         return ""
+    if isinstance(data, list):
+        data = random.choice(data)
 
     # 解析标题行和正文
     lines = data.strip().split("\n")

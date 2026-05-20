@@ -1,5 +1,5 @@
 #!/bin/bash
-# 夏令营模拟面试 — PythonAnywhere 一键部署脚本
+# 模拟面试 — PythonAnywhere 一键部署脚本
 # 在 PythonAnywhere Bash 终端中运行此脚本即可
 
 set -e

@@ -1,4 +1,4 @@
-使用 Claude Code Agent 全程驱动开发了「夏令营模拟面试」AI 语音对话系统（约 1,900 行 Python + 40KB Agent 提示词工程）。
+使用 Claude Code Agent 全程驱动开发了「模拟面试」AI 语音对话系统（约 1,900 行 Python + 40KB Agent 提示词工程）。
 
 Agent 自主完成从架构设计到代码编写的全流程，核心模块一次编译通过。系统采用三层 AI 协同架构：TTS 层基于 edge-tts 实现三种面试风格的差异化音色（压力面男声压迫感、结构化男声稳重、温和面女声温暖），语速和音高动态切换；STT 层以 faster-whisper-large-v3 本地离线识别为主、Google STT 在线兜底，保障隐私与可用性；LLM 层支持 Claude API 根据候选人简历与实时回答动态生成个性化追问。
 

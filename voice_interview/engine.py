@@ -5,6 +5,7 @@
 
 import json
 import os
+import random
 import re
 import textwrap
 from datetime import datetime
@@ -38,11 +39,11 @@ class InterviewState:
     DIMENSIONS = [
         "self_intro_cn",
         "self_intro_en",
+        "english",
         "project",
         "principle",
         "basics",
         "core_knowledge",
-        "english",
         "quality",
     ]
 
@@ -97,9 +98,16 @@ class RuleBasedEngine:
         self._basics_weak = []      # 弱项话题列表
         self._basics_hints_given = 0  # 已给提示次数
 
+    @staticmethod
+    def _pick(options):
+        """从列表中随机选一个；兼容旧的单字符串格式"""
+        if isinstance(options, list):
+            return random.choice(options) if options else ""
+        return options or ""
+
     def start(self) -> str:
         """返回开场白"""
-        return self.config["opening"]
+        return self._pick(self.config["opening"])
 
     def next_question(self) -> Optional[str]:
         """
@@ -155,6 +163,35 @@ class RuleBasedEngine:
         if dim == "basics":
             self._evaluate_basics(answer)
 
+        # 超时检测
+        if answer == "(超时未作答)":
+            timeout_msg = self.config.get("timeout_comment", "时间到，下一个问题。")
+            state.transcript.append({
+                "dimension": dim,
+                "role": "interviewer",
+                "content": timeout_msg,
+                "time": datetime.now().isoformat(),
+            })
+            self._pending_followups.clear()
+            self._pending_followups.append(timeout_msg)
+            self._force_advance_dimension()
+            return
+
+        # 英文文献翻译：检测放弃
+        if dim == "english" and self._is_english_give_up(answer):
+            self._pending_followups.clear()
+            give_up_msg = self.config.get("english_give_up", "好的，我们跳过文献翻译环节。")
+            state.transcript.append({
+                "dimension": dim,
+                "role": "interviewer",
+                "content": give_up_msg,
+                "time": datetime.now().isoformat(),
+            })
+            self._pending_followups.append(give_up_msg)
+            self.state.scores["english"] = 2.0
+            self._force_advance_dimension()
+            return
+
         # 根据风格决定是否生成追问
         followups = self._generate_followups(dim, answer)
         self._pending_followups.extend(followups)
@@ -201,10 +238,10 @@ class RuleBasedEngine:
         if uncertain > 0:
             score -= 0.5
 
-        # 如果被跳过
-        if any("(候选人选择跳过" in a for a in answers):
-            score = 3.0
-            comment = "未作答"
+        # 如果被跳过、放弃或超时
+        if any("(候选人选择跳过" in a or "放弃" in a or "超时" in a for a in answers):
+            score = 2.0
+            comment = "未作答、放弃或超时"
 
         dim_label = self.state.DIMENSION_LABELS.get(dim, dim)
         self.state.scores[dim] = score  # 存储以便最终报告使用
@@ -248,7 +285,7 @@ class RuleBasedEngine:
 
         # 过渡语（每个维度第一次进入时）
         if qi == 0:
-            transition = self.config["transitions"].get(dim, "")
+            transition = self._pick(self.config["transitions"].get(dim, [""]))
             # 项目维度：如果有简历，个性化过渡语
             if dim == "project":
                 hints = self._extract_resume_hints()
@@ -358,7 +395,8 @@ class RuleBasedEngine:
         generic = {"The", "This", "That", "With", "From", "They", "Their",
                    "These", "Those", "About", "Using", "Based", "However",
                    "Introduction", "Conclusion", "Abstract", "References",
-                   "University", "College", "School", "Department"}
+                   "University", "College", "School", "Department",
+                   "GPA", "Gpa", "CV", "Resume"}
         tech_words = [w for w in tech_words if w not in generic]
         result["tech_words"] = list(dict.fromkeys(tech_words))[:5]  # 去重保留前5
 
@@ -505,16 +543,18 @@ class RuleBasedEngine:
 
     def _english_question(self, qi: int) -> str:
         """英文文献翻译"""
-        abstract = MAJOR_PAPER_ABSTRACTS.get(
+        data = MAJOR_PAPER_ABSTRACTS.get(
             self.state.major,
             MAJOR_PAPER_ABSTRACTS["计算机"]
         )
+        abstract = random.choice(data) if isinstance(data, list) else data
 
         if qi == 1:
             return (
                 f"下面是本学科一篇经典文献的原文片段，包含大量专业术语。\n"
                 f"请在 5 分钟内阅读并逐句翻译成中文。\n"
-                f"注意：不需要翻译完美，考察重点是专业词汇的准确理解和学术英语阅读能力。\n\n"
+                f"注意：不需要翻译完美，考察重点是专业词汇的准确理解和学术英语阅读能力。\n"
+                f"如果确实无法完成，可以回复「放弃」跳过此环节。\n\n"
                 f"══════════════════════════════════════\n"
                 f"{abstract}\n"
                 f"══════════════════════════════════════\n\n"
@@ -543,11 +583,11 @@ class RuleBasedEngine:
         return followups[idx] if idx < len(followups) else None
 
     def _quality_question(self, qi: int) -> str:
-        """综合素质问题"""
-        idx = min(qi - 1, len(QUALITY_QUESTIONS) - 1)
-        if idx < 0:
-            return QUALITY_QUESTIONS[0] if QUALITY_QUESTIONS else None
-        return QUALITY_QUESTIONS[idx] if idx < len(QUALITY_QUESTIONS) else None
+        """综合素质问题（从风格专属题库随机选取）"""
+        pool = self.config.get("quality_questions") or QUALITY_QUESTIONS
+        if not pool:
+            return None
+        return random.choice(pool)
 
     # ================================================================
     # 追问生成 & 维度推进
@@ -607,6 +647,21 @@ class RuleBasedEngine:
             self._basics_correct += 1
         else:
             self._basics_correct = max(0, self._basics_correct - 1)  # 答得一般，重置计数
+
+    def _is_english_give_up(self, answer: str) -> bool:
+        """检测候选人在英文文献翻译环节是否选择放弃"""
+        give_up_keywords = ["放弃", "不会翻译", "跳过翻译", "翻译不了", "看不懂",
+                            "不会翻", "放弃翻译", "不想翻译", "无法翻译"]
+        return any(kw in answer for kw in give_up_keywords)
+
+    def _force_advance_dimension(self):
+        """强制跳转到下一个维度（用于放弃等情况）"""
+        state = self.state
+        dim = state.DIMENSIONS[state.dimension_index] if state.dimension_index < len(state.DIMENSIONS) else ""
+        self._current_dim = dim
+        state.dimension_index += 1
+        state.question_index = -1  # -1 因为 next_question() 会先 +1，这样 qi=0 触发过渡语
+        self._followup_count = 0
 
     def _should_advance_dimension(self, dim: str) -> bool:
         """
@@ -850,7 +905,7 @@ class ClaudeEngine(RuleBasedEngine):
             with open(skill_path, "r", encoding="utf-8") as f:
                 base_prompt = f.read()
         else:
-            base_prompt = f"你是一个{self.config['name']}风格的夏令营面试官。"
+            base_prompt = f"你是一个{self.config['name']}风格的模拟面试官。"
 
         # 添加候选人的材料信息
         material_context = f"""

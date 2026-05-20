@@ -358,7 +358,7 @@ def listen(language: str = "zh-CN", timeout: int = 10) -> str:
         print("  ⏰ 录音太短。")
         return ""
     actual_level = np.abs(audio_data).mean()
-    if actual_level < 0.0003:
+    if actual_level < 0.0001:
         print(f"  📢 音量过低 (电平: {actual_level:.5f})，请检查麦克风是否静音或离得太远。")
         return ""
 
@@ -383,7 +383,8 @@ def _transcribe(audio_data, sample_rate: int, language: str) -> str:
             segments, _ = model.transcribe(
                 audio_data, beam_size=5,
                 language="zh" if language.startswith("zh") else None,
-                vad_filter=True
+                vad_filter=True,
+                vad_parameters=dict(min_silence_duration_ms=800)
             )
             text = " ".join(s.text for s in segments).strip()
             if text:

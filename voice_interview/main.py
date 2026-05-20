@@ -1,5 +1,5 @@
 """
-夏令营模拟面试 — 语音对话系统
+模拟面试 — 语音对话系统
 ================================
 三种面试风格（压力面 / 结构化评分 / 温和引导式）
 × 两种输入模式（文字 / 语音）
@@ -36,7 +36,7 @@ def clear_screen():
 def print_banner():
     print(r"""
   ╔══════════════════════════════════════╗
-  ║     🎓 夏令营模拟面试 — 语音对话系统  ║
+  ║     🎓 模拟面试 — 语音对话系统  ║
   ║      压力面 · 结构化 · 温和引导      ║
   ╚══════════════════════════════════════╝
     """)
@@ -505,7 +505,7 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
     # 历史对比
     _compare_with_history(engine)
 
-    print("\n感谢使用夏令营模拟面试系统！")
+    print("\n感谢使用模拟面试系统！")
 
 
 # ============================================================
@@ -514,7 +514,7 @@ async def run_interview_loop(engine, voice_io_enabled: bool, tts_enabled: bool):
 
 async def main():
     parser = argparse.ArgumentParser(
-        description="夏令营模拟面试 — 语音对话系统"
+        description="模拟面试 — 语音对话系统"
     )
     parser.add_argument(
         "--style", "-s",

@@ -1,5 +1,5 @@
 """
-夏令营模拟面试 — Web 版本
+模拟面试 — Web 版本
 Flask REST API + 浏览器原生语音（SpeechRecognition / SpeechSynthesis）
 """
 import os
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
-    print("\n  === 夏令营模拟面试 - Web 版 ===")
+    print("\n  === 模拟面试 - Web 版 ===")
     print(f"  本机访问: http://127.0.0.1:{port}")
     print(f"  局域网访问: http://{local_ip}:{port}")
     print("  按 Ctrl+C 停止服务器\n")
